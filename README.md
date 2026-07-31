@@ -12,9 +12,10 @@
 
 A Claude-Code-style terminal built for red-teaming LLMs (CLI command: `wallbreaker`). You talk to it like
 Claude Code; it reasons and calls tools in a loop. The backend is fully configurable, so
-it runs on **OpenRouter**, the **Z.AI GLM coding plan**, the local **Claude Code CLI**, a
-local server, or any OpenAI-/Anthropic-compatible API (including third-party proxies via
-bearer-auth). It ships with a deep red-team toolkit: the **Parseltongue** transform engine,
+it runs on **OpenRouter**, the **Z.AI GLM coding plan**, the local **Claude Code CLI**,
+the local **Codex CLI** through its existing login, a local server, or any
+OpenAI-/Anthropic-compatible API (including third-party proxies via bearer-auth). It ships
+with a deep red-team toolkit: the **Parseltongue** transform engine,
 the **L1B3RT4S** jailbreak library, the **HarmBench** behavior benchmark, automated attack
 loops (PAIR/TAP, Crescendo, best-of-N), a from-scratch **persona author**, native-format
 target mimicry from a leaked system-prompt corpus, a **multimodal image-edit attack channel**,
@@ -52,9 +53,9 @@ an LLM judge, and reliability validation.
 - **Multimodal image channel:** `query_image_edit` fires an image + instruction at an image
   target and vision-judges the result; `image_chain` runs a Chain-of-Jailbreak, decomposing a
   refused image into a ladder of benign edit steps. Plus Tier-3 T2I framing transforms.
-- **Pluggable attacker brains:** OpenAI/Anthropic APIs, or the local **Claude Code CLI**
-  (`protocol = "claude-code"`, keyless) as the red-team brain. Third-party Anthropic proxies
-  work via `auth_style = "bearer"`.
+- **Pluggable attacker brains:** OpenAI/Anthropic APIs, or local **Claude Code/Codex CLIs**
+  (`protocol = "claude-code"` / `"codex"`, keyless) as the red-team brain. Third-party
+  Anthropic proxies work via `auth_style = "bearer"`.
 - **Extended attack arsenal (this fork):** `cipherchat` (CipherChat/SelfCipher, ICLR
   2024) teaches the target a cipher in-band then fires in ciphertext; `skeleton_key`
   (Russinovich 2024) reframes the guardrail as a policy amendment with a "Warning:"
@@ -124,6 +125,14 @@ protocol = "claude-code"
 model    = "sonnet"
 # system_prompt_file = "operator.md"   # optional: leads the harness tool doctrine
 
+# Local Codex CLI through the existing `codex login` session. This consumes the signed-in
+# Codex/ChatGPT plan rather than an API key.
+[profiles.codex-brain]
+protocol         = "codex"
+model            = "gpt-5.6-sol"
+reasoning_effort = "max"
+timeout          = 600
+
 # Third-party Anthropic-compatible proxy that wants an OpenAI-style bearer token.
 [profiles.proxy]
 protocol   = "anthropic"
@@ -132,6 +141,39 @@ api_key    = "..."
 model      = "claude-sonnet-4"
 auth_style = "bearer"                          # Authorization: Bearer <key> (default: x-api-key)
 ```
+
+Codex can also fill all three roles with independent reasoning budgets:
+
+```toml
+default_profile = "codex-brain"
+
+[profiles.codex-brain]
+protocol = "codex"
+model = "gpt-5.6-sol"
+reasoning_effort = "max"
+timeout = 600
+
+[target]
+protocol = "codex"
+model = "gpt-5.6-luna"
+reasoning_effort = "low"
+timeout = 600
+
+[judge]
+protocol = "codex"
+model = "gpt-5.6-luna"
+reasoning_effort = "high"
+timeout = 600
+```
+
+Run `codex login status` first. The adapter launches an ephemeral `codex exec` in an empty
+read-only workspace, disables shell, web search, apps, multi-agent, and memories, and maps
+the harness system prompt to Codex `developer_instructions`. Codex CLI is an agent surface,
+not a raw completion API, so Wallbreaker's `max_tokens` and `temperature` arguments cannot
+be enforced on these calls. Model availability and supported effort levels depend on the
+signed-in account. Codex currently accepts `developer_instructions` only as a CLI config
+override, so the system prompt is visible to other local users who can inspect process
+arguments; do not put credentials or other secrets in it.
 
 ### P4RS3LT0NGV3 engine (native)
 

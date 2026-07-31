@@ -140,6 +140,7 @@ export interface ProviderRecord extends ProfileDetail {
   models_path: string;
   timeout: number;
   reasoning: boolean;
+  reasoning_effort: string | null;
 }
 
 export interface RoleChoice {

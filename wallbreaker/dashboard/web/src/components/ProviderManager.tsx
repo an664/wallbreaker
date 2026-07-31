@@ -6,7 +6,7 @@ import { ModelChooser } from "./ModelChooser";
 const EMPTY = {
   name: "", protocol: "openai", base_url: "", model: "", api_key_env: "",
   api_key: "", auth_style: "bearer", inference_path: "", models_path: "",
-  modality: "text", timeout: 120, reasoning: false, enabled: true,
+  modality: "text", timeout: 120, reasoning: false, reasoning_effort: "", enabled: true,
 };
 
 export function ProviderManager({ onChanged }: { onChanged: () => void }) {
@@ -63,7 +63,7 @@ export function ProviderManager({ onChanged }: { onChanged: () => void }) {
     finally { setTesting(null); }
   };
   return <details className="settings-drawer" open>
-    <summary><span><b>Provider connections</b><small>Configure API-compatible services and credentials</small></span></summary>
+    <summary><span><b>Provider connections</b><small>Configure API services and local CLI logins</small></span></summary>
     <div className="drawer-body provider-manager">
       <div className="provider-toolbar">
         <button type="button" className="primary-command" onClick={() => edit()}>Add provider</button>
@@ -99,7 +99,7 @@ export function ProviderManager({ onChanged }: { onChanged: () => void }) {
         <div className="editor-heading"><b>{providers.some((p) => p.name === form.name) ? "Edit provider" : "New provider"}</b><button type="button" aria-label="Close provider editor" title="Close" onClick={() => setEditing(false)}>×</button></div>
         <div className="form-grid">
           <label>Name<input value={String(form.name || "")} onChange={(e) => update("name", e.target.value)} /></label>
-          <label>Protocol<select value={String(form.protocol)} onChange={(e) => update("protocol", e.target.value)}><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic compatible</option><option value="claude-code">Claude Code</option></select></label>
+          <label>Protocol<select value={String(form.protocol)} onChange={(e) => update("protocol", e.target.value)}><option value="openai">OpenAI compatible</option><option value="anthropic">Anthropic compatible</option><option value="claude-code">Claude Code</option><option value="codex">Codex CLI</option></select></label>
           <label className="wide">Base URL<input value={String(form.base_url || "")} placeholder="https://api.example.com/v1" onChange={(e) => update("base_url", e.target.value)} /></label>
           <label>Default model (optional)<ModelChooser
             profile={String(form.name || "")}
@@ -113,6 +113,7 @@ export function ProviderManager({ onChanged }: { onChanged: () => void }) {
           <label>Authentication<select value={String(form.auth_style || "bearer")} onChange={(e) => update("auth_style", e.target.value)}><option value="bearer">Bearer token</option><option value="x-api-key">x-api-key</option></select></label>
           <label>Default modality<select value={String(form.modality || "text")} onChange={(e) => update("modality", e.target.value)}><option value="text">Text</option><option value="image">Image generation</option></select></label>
           <label>Request timeout (seconds)<input type="number" min={0} step={1} value={Number(form.timeout || 0)} onChange={(e) => update("timeout", Number(e.target.value))} /></label>
+          {String(form.protocol) === "codex" && <label>Reasoning effort<select value={String(form.reasoning_effort || "")} onChange={(e) => update("reasoning_effort", e.target.value)}><option value="">Codex default</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option><option value="ultra">Ultra</option></select></label>}
           <label className="toggle-field"><input type="checkbox" checked={Boolean(form.reasoning)} onChange={(e) => update("reasoning", e.target.checked)} /><span>Request reasoning output</span></label>
           <label>Inference path<input value={String(form.inference_path || "")} placeholder="Protocol default" onChange={(e) => update("inference_path", e.target.value)} /></label>
           <label>Models path<input value={String(form.models_path || "")} placeholder="Protocol default" onChange={(e) => update("models_path", e.target.value)} /></label>

@@ -51,6 +51,34 @@ def test_custom_assignment_is_canonical_and_ignores_runtime_state(tmp_path):
     assert summary["custom"] is True
 
 
+def test_direct_codex_roles_preserve_independent_reasoning_effort(tmp_path):
+    brain = Endpoint(
+        "brain", "codex", "", "gpt-5.6-sol",
+        timeout=600, reasoning_effort="max",
+    )
+    config = Config(
+        default_profile="brain",
+        profiles={"brain": brain},
+        target=Endpoint(
+            "target", "codex", "", "gpt-5.6-luna",
+            timeout=300, reasoning_effort="low",
+        ),
+        judge=Endpoint(
+            "judge", "codex", "", "gpt-5.6-luna",
+            timeout=450, reasoning_effort="high",
+        ),
+        path=tmp_path / "config.toml",
+    )
+
+    run_config, _ = resolved_config(config)
+
+    assert run_config.profile().reasoning_effort == "max"
+    assert run_config.target.reasoning_effort == "low"
+    assert run_config.target.timeout == 300
+    assert run_config.judge.reasoning_effort == "high"
+    assert run_config.judge.timeout == 450
+
+
 def test_prompt_sources_are_exclusive_and_file_is_validated(tmp_path):
     config = _config(tmp_path)
     with pytest.raises(ConfigError, match="cannot both"):

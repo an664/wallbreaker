@@ -99,6 +99,29 @@ def test_provider_can_be_saved_and_tested_without_default_model(monkeypatch, tmp
     assert catalog.json()["models"] == ["vendor/model-a", "vendor/model-b"]
 
 
+def test_codex_provider_round_trip_needs_no_url_or_key(tmp_path):
+    cfg = _config(tmp_path)
+    client = TestClient(create_app(config=cfg, sessions_dir=tmp_path / "sessions"))
+    saved = client.put(
+        "/api/providers/codex-brain",
+        json={
+            "protocol": "codex",
+            "model": "gpt-5.6-sol",
+            "reasoning_effort": "max",
+            "timeout": 600,
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["base_url"] == ""
+    assert saved.json()["has_api_key"] is False
+    assert saved.json()["reasoning_effort"] == "max"
+    persisted = tomllib.loads((tmp_path / "config.toml").read_text(encoding="utf-8"))
+    assert persisted["profiles"]["codex-brain"]["reasoning_effort"] == "max"
+    reloaded = load_config(tmp_path / "config.toml").profiles["codex-brain"]
+    assert reloaded.protocol == "codex"
+    assert reloaded.reasoning_effort == "max"
+
+
 def test_config_provider_can_be_edited_like_any_other_provider(tmp_path):
     cfg = _config(tmp_path)
     client = TestClient(create_app(config=cfg, sessions_dir=tmp_path / "sessions"))

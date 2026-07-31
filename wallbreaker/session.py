@@ -372,7 +372,7 @@ class RunLog:
         fields = (
             "name", "protocol", "base_url", "model", "api_key_env", "provider",
             "timeout", "modality", "reasoning", "system_mode", "auth_style",
-            "inference_path", "models_path",
+            "inference_path", "models_path", "reasoning_effort",
         )
         return {
             field: list(value) if isinstance(value, tuple) else value

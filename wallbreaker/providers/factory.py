@@ -4,6 +4,7 @@ from ..config import Endpoint
 from .anthropic_provider import AnthropicProvider
 from .base import DEFAULT_TIMEOUT, Provider, ProviderError
 from .claude_code import ClaudeCodeProvider
+from .codex import CodexProvider
 from .image_provider import OpenRouterImageProvider
 from .openai_provider import OpenAIProvider
 
@@ -22,4 +23,6 @@ def build_provider(endpoint: Endpoint, timeout: float | None = None) -> Provider
         return AnthropicProvider(endpoint, timeout=resolved)
     if endpoint.protocol == "claude-code":
         return ClaudeCodeProvider(endpoint, timeout=resolved)
+    if endpoint.protocol == "codex":
+        return CodexProvider(endpoint, timeout=resolved)
     raise ProviderError(f"Unknown protocol '{endpoint.protocol}'")

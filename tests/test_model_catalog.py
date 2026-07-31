@@ -115,3 +115,58 @@ def test_normal_model_lookup_fetches_provider_only_once(monkeypatch, tmp_path):
     assert first.get("cached") is not True
     assert second["cached"] is True
     assert second["models"] == ["configured-model", "remote-model"]
+
+
+def test_codex_model_lookup_reads_local_non_secret_cache(monkeypatch, tmp_path):
+    import json
+    import wallbreaker.providers.codex as codex
+
+    monkeypatch.setattr(codex, "codex_login_status", lambda: (True, "Logged in for test"))
+    codex_home = tmp_path / "codex-home"
+    codex_home.mkdir()
+    (codex_home / "models_cache.json").write_text(
+        json.dumps(
+            {
+                "models": [
+                    {"slug": "gpt-5.6-sol", "visibility": "list"},
+                    {"slug": "gpt-5.6-luna", "visibility": "list"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    cfg = Config(
+        default_profile="codex",
+        profiles={"codex": Endpoint("codex", "codex", "", "gpt-5.6-sol")},
+        path=tmp_path / "config.toml",
+    )
+    client = TestClient(create_app(config=cfg, sessions_dir=tmp_path / "sessions"))
+
+    result = client.get("/api/models", params={"profile": "codex"}).json()
+
+    assert result["fetched"] is True
+    assert result["models"] == ["gpt-5.6-luna", "gpt-5.6-sol"]
+
+
+def test_codex_model_lookup_does_not_treat_stale_cache_as_connection(
+    monkeypatch, tmp_path
+):
+    import wallbreaker.providers.codex as codex
+
+    monkeypatch.setattr(
+        codex, "codex_login_status", lambda: (False, "Codex login expired")
+    )
+    cfg = Config(
+        default_profile="codex",
+        profiles={"codex": Endpoint("codex", "codex", "", "cached-model")},
+        path=tmp_path / "config.toml",
+    )
+    client = TestClient(create_app(config=cfg, sessions_dir=tmp_path / "sessions"))
+
+    result = client.post("/api/providers/codex/test").json()
+
+    assert result["ok"] is False
+    assert result["fetched"] is False
+    assert result["models"] == ["cached-model"]
+    assert result["error"] == "Codex login expired"

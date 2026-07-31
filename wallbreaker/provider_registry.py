@@ -6,10 +6,10 @@ import os
 import re
 from pathlib import Path
 
-from .config import Config, ConfigError, Endpoint
+from .config import Config, ConfigError, Endpoint, REASONING_EFFORTS
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-_PROTOCOLS = {"openai", "anthropic", "claude-code"}
+_PROTOCOLS = {"openai", "anthropic", "claude-code", "codex"}
 _ENDPOINT_FIELDS = tuple(field.name for field in dataclasses.fields(Endpoint))
 _TABLE_RE = re.compile(r"(?m)^[ \t]*\[\[?[^\r\n]+?\]\]?[ \t]*(?:#.*)?$")
 _PROFILE_RE = re.compile(
@@ -37,11 +37,16 @@ def _normalize(name: str, body: dict, current: Endpoint | None = None) -> Endpoi
     base.update({key: value for key, value in body.items() if key in _ENDPOINT_FIELDS})
     protocol = str(base.get("protocol") or "").lower()
     if protocol not in _PROTOCOLS:
-        raise ConfigError("protocol must be openai, anthropic, or claude-code")
+        raise ConfigError("protocol must be openai, anthropic, claude-code, or codex")
     model = str(base.get("model") or "").strip()
     base_url = str(base.get("base_url") or "").strip().rstrip("/")
-    if protocol != "claude-code" and not base_url:
+    if protocol not in ("claude-code", "codex") and not base_url:
         raise ConfigError("base_url is required")
+    reasoning_effort = str(base.get("reasoning_effort") or "").lower() or None
+    if reasoning_effort is not None and reasoning_effort not in REASONING_EFFORTS:
+        raise ConfigError(
+            f"reasoning_effort must be one of: {', '.join(REASONING_EFFORTS)}"
+        )
     provider = base.get("provider") or ()
     if isinstance(provider, str):
         provider = tuple(part.strip() for part in provider.split(",") if part.strip())
@@ -58,6 +63,7 @@ def _normalize(name: str, body: dict, current: Endpoint | None = None) -> Endpoi
         timeout=float(base.get("timeout") or 0),
         modality=str(base.get("modality") or "text"),
         reasoning=bool(base.get("reasoning", False)),
+        reasoning_effort=reasoning_effort,
         system_mode=str(base.get("system_mode") or "default"),
         system_prompt_file=str(base.get("system_prompt_file") or ""),
         auth_style=str(base.get("auth_style") or "x-api-key"),
@@ -101,6 +107,8 @@ def _profile_block(name: str, endpoint: Endpoint, enabled: bool) -> str:
         values.append(("modality", endpoint.modality))
     if endpoint.reasoning:
         values.append(("reasoning", True))
+    if endpoint.reasoning_effort:
+        values.append(("reasoning_effort", endpoint.reasoning_effort))
     if endpoint.system_mode != "default":
         values.append(("system_mode", endpoint.system_mode))
     if endpoint.system_prompt_file:

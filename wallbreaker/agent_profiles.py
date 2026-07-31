@@ -73,6 +73,7 @@ def resolve_role(config: Config, role: str) -> tuple[Endpoint, dict]:
         raise ConfigError(f"Unknown agent role '{role}'")
     assignment = config.active_agents.get(role, AgentAssignment())
     profile = config.agent_profiles.get(role, {}).get(assignment.profile) if assignment.profile else None
+    fallback_endpoint: Endpoint | None = None
     if assignment.profile and profile is None:
         raise ConfigError(f"Active {role} profile '{assignment.profile}' does not exist")
     if profile:
@@ -87,10 +88,15 @@ def resolve_role(config: Config, role: str) -> tuple[Endpoint, dict]:
         prompt, profile_name, prompt_source = "", "", "none"
     else:
         provider_name, fallback = _fallback(config, role)
+        fallback_endpoint = fallback
         model = fallback.model
         prompt = getattr(fallback, "system_prompt", "")
         profile_name, prompt_source = "", "file" if fallback.system_prompt_file else ("inline" if prompt else "none")
-    provider = config.profiles.get(provider_name)
+    # A direct [target]/[judge] endpoint can share protocol/base_url/auth with a profile
+    # while carrying different run controls (timeout, system mode, Codex effort, etc.).
+    # Keep that concrete fallback endpoint instead of silently replacing it with the
+    # first matching provider connection.
+    provider = fallback_endpoint or config.profiles.get(provider_name)
     if provider is None:
         _, provider = _fallback(config, role)
     endpoint = dataclasses.replace(

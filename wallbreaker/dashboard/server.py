@@ -21,7 +21,7 @@ _ENDPOINT_PREFIXES = ("attacker", "target", "judge", "art")
 _ENDPOINT_FIELDS = (
     "protocol", "base_url", "model", "api_key_env", "provider", "timeout",
     "modality", "reasoning", "system_mode", "system_prompt_file", "auth_style",
-    "inference_path", "models_path",
+    "inference_path", "models_path", "reasoning_effort",
 )
 _AGENT_CONTROL_TOOLS = {"finish", "ask_operator"}
 
@@ -657,6 +657,24 @@ async def _discover_profile_models(profile: str, endpoint) -> dict:
     }
     if protocol == "claude-code":
         result["error"] = "This local provider does not expose a model catalog."
+        return result
+    if protocol == "codex":
+        from ..providers.codex import codex_login_status, discover_codex_models
+
+        login_ready, login_detail = codex_login_status()
+        if not login_ready:
+            result["error"] = login_detail
+            return result
+        models = discover_codex_models()
+        if current and current not in models:
+            models.append(current)
+            models.sort(key=str.casefold)
+        result["models"] = models
+        result["fetched"] = bool(models)
+        if not models:
+            result["error"] = (
+                f"{login_detail}; model cache is unavailable, so run Codex once or type a model id."
+            )
         return result
     if not base_url:
         result["error"] = "This profile has no model catalog URL."

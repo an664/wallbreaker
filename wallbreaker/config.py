@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_CONFIG_NAMES = ("config.toml", "config.example.toml")
+REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max", "ultra")
 
 
 class ConfigError(Exception):
@@ -90,6 +91,10 @@ class Endpoint:
     # otherwise let a 5m cache go cold and re-pay the full write. Writes bill 2x at 1h vs 1.25x
     # at 5m, so it wins the moment one reuse lands after the 5m mark. Byte-identical output.
     cache_ttl: str = "5m"
+    # Codex CLI reasoning level. Kept separate from the generic `reasoning` output toggle:
+    # this controls how much inference effort Codex spends, while `reasoning` requests that
+    # API providers expose their reasoning channel.
+    reasoning_effort: str | None = None
 
     def resolved_key(self) -> str:
         if self.api_key:
@@ -187,12 +192,34 @@ def doctor_report(config: Config) -> tuple[str, bool]:
         f"default_profile '{config.default_profile}' exists",
         config.default_profile in config.profiles,
     )
-    for name, ep in config.profiles.items():
-        has_key = bool(ep.resolved_key())
-        detail = f"{ep.model} @ {ep.base_url}"
-        if not has_key:
+    endpoints = [
+        *config.profiles.values(),
+        *(ep for ep in (config.target, config.judge, config.art) if ep is not None),
+    ]
+    codex_ready, codex_status = True, ""
+    if any(ep.protocol == "codex" for ep in endpoints):
+        from .providers.codex import codex_login_status
+
+        codex_ready, codex_status = codex_login_status()
+
+    def credentials_ready(ep: Endpoint) -> bool:
+        if ep.protocol == "codex":
+            return codex_ready
+        return ep.protocol == "claude-code" or bool(ep.resolved_key())
+
+    def endpoint_detail(ep: Endpoint, suffix: str = "") -> str:
+        detail = f"{ep.model} @ {ep.base_url or 'local CLI'}{suffix}"
+        if ep.protocol == "codex":
+            detail += f" ({codex_status})"
+        elif ep.protocol == "claude-code":
+            detail += " (uses local CLI login)"
+        elif not ep.resolved_key():
             detail += f" (no key: set {ep.api_key_env or 'api_key'})"
-        check(f"profile '{name}' key resolves", has_key, detail)
+        return detail
+
+    for name, ep in config.profiles.items():
+        has_key = credentials_ready(ep)
+        check(f"profile '{name}' key resolves", has_key, endpoint_detail(ep))
 
     if config.target is None:
         lines.append("[note] no [target] - set one or use /target before attacking")
@@ -202,8 +229,8 @@ def doctor_report(config: Config) -> tuple[str, bool]:
         )
         check(
             "target key resolves",
-            bool(config.target.resolved_key()),
-            f"{config.target.model} @ {config.target.base_url}{modality_note}",
+            credentials_ready(config.target),
+            endpoint_detail(config.target, modality_note),
         )
 
     if config.judge is None:
@@ -211,8 +238,8 @@ def doctor_report(config: Config) -> tuple[str, bool]:
     else:
         check(
             "judge key resolves",
-            bool(config.judge.resolved_key()),
-            f"{config.judge.model} @ {config.judge.base_url}",
+            credentials_ready(config.judge),
+            endpoint_detail(config.judge),
         )
 
     if config.art is None:
@@ -223,8 +250,8 @@ def doctor_report(config: Config) -> tuple[str, bool]:
     else:
         check(
             "art key resolves",
-            bool(config.art.resolved_key()),
-            f"{config.art.model} @ {config.art.base_url}",
+            credentials_ready(config.art),
+            endpoint_detail(config.art),
         )
 
     lines.append("=" * 40)
@@ -234,12 +261,12 @@ def doctor_report(config: Config) -> tuple[str, bool]:
 
 def _endpoint_from_table(name: str, table: dict, *, require_model: bool = False) -> Endpoint:
     protocol = str(table.get("protocol", "")).lower()
-    # claude-code drives the local `claude` CLI - it authenticates itself and needs no
+    # claude-code and codex drive local CLIs that authenticate themselves and need no
     # base_url/api_key. 'xai' is native xAI (api.x.ai) - OpenAI-compatible wire format whose
     # base_url defaults to the xAI host, so it too needs only 'protocol'. Provider profiles
     # may omit a default model while their catalog is being discovered; concrete
     # target/judge/art endpoints still require one (require_model).
-    if protocol in ("claude-code", "xai"):
+    if protocol in ("claude-code", "codex", "xai"):
         required = ("protocol",)
     else:
         required = ("protocol", "base_url")
@@ -248,10 +275,10 @@ def _endpoint_from_table(name: str, table: dict, *, require_model: bool = False)
     missing = [k for k in required if k not in table]
     if missing:
         raise ConfigError(f"Endpoint '{name}' missing keys: {', '.join(missing)}")
-    if protocol not in ("openai", "anthropic", "claude-code", "xai"):
+    if protocol not in ("openai", "anthropic", "claude-code", "codex", "xai"):
         raise ConfigError(
             f"Endpoint '{name}' has invalid protocol '{protocol}' "
-            f"(expected 'openai', 'anthropic', 'xai', or 'claude-code')"
+            f"(expected 'openai', 'anthropic', 'xai', 'claude-code', or 'codex')"
         )
     modality = str(table.get("modality", "text")).lower()
     if modality not in ("text", "image"):
@@ -274,6 +301,12 @@ def _endpoint_from_table(name: str, table: dict, *, require_model: bool = False)
             base_url = "https://api.x.ai/v1"
         if not api_key and not api_key_env:
             api_key_env = "XAI_API_KEY"
+    reasoning_effort = str(table.get("reasoning_effort", "") or "").lower() or None
+    if reasoning_effort is not None and reasoning_effort not in REASONING_EFFORTS:
+        raise ConfigError(
+            f"Endpoint '{name}' has invalid reasoning_effort '{reasoning_effort}' "
+            f"(expected one of: {', '.join(REASONING_EFFORTS)})"
+        )
     provider = table.get("provider")
     if isinstance(provider, str):
         provider = (provider,)
@@ -301,6 +334,7 @@ def _endpoint_from_table(name: str, table: dict, *, require_model: bool = False)
         jailbreak_file=str(table.get("jailbreak_file", "")),
         cache=bool(table.get("cache", True)),
         cache_ttl="1h" if str(table.get("cache_ttl", "5m")).lower() == "1h" else "5m",
+        reasoning_effort=reasoning_effort,
     )
 
 

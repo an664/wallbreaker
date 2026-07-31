@@ -45,6 +45,23 @@ def test_invalid_protocol_message_lists_xai():
         _endpoint_from_table("bad", {"protocol": "nope", "base_url": "x", "model": "m"})
 
 
+def test_codex_endpoint_is_keyless_and_parses_reasoning_effort():
+    ep = _endpoint_from_table(
+        "codex", {"protocol": "codex", "model": "gpt-5.6-sol", "reasoning_effort": "max"}
+    )
+    assert ep.base_url == ""
+    assert ep.api_key_env == ""
+    assert ep.reasoning_effort == "max"
+
+
+def test_codex_rejects_unknown_reasoning_effort():
+    with pytest.raises(ConfigError, match="reasoning_effort"):
+        _endpoint_from_table(
+            "codex",
+            {"protocol": "codex", "model": "gpt-5.6-sol", "reasoning_effort": "huge"},
+        )
+
+
 def test_load_example_config():
     cfg = load_config("config.example.toml")
     assert cfg.default_profile == "openrouter"
@@ -111,3 +128,32 @@ def test_concrete_target_still_requires_model(tmp_path):
 
     with pytest.raises(ConfigError, match="target.*model"):
         load_config(path)
+
+
+def test_cli_model_override_preserves_codex_endpoint_controls():
+    from argparse import Namespace
+
+    from wallbreaker.cli import _override_endpoint
+
+    ep = Endpoint(
+        "brain",
+        "codex",
+        "",
+        "gpt-5.6-sol",
+        timeout=600,
+        system_prompt_file="operator.md",
+        reasoning_effort="max",
+    )
+    args = Namespace(
+        protocol=None,
+        base_url=None,
+        model="gpt-5.6-luna",
+        api_key_env=None,
+        api_key=None,
+        reasoning_effort=None,
+    )
+    updated = _override_endpoint(ep, args)
+    assert updated.model == "gpt-5.6-luna"
+    assert updated.reasoning_effort == "max"
+    assert updated.timeout == 600
+    assert updated.system_prompt_file == "operator.md"

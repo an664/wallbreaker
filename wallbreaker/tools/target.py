@@ -161,8 +161,9 @@ def _cache_hit_output(ctx, messages, system, entry, enc_note, args) -> str:
             "\n\n<<raw encoded reply (what the output classifier saw), excerpt>>\n"
             f"{raw_encoded[:300]}"
         )
+    location = target.base_url or target.protocol
     header = (
-        f"[target {target.model} @ {target.base_url} | CACHED "
+        f"[target {target.model} @ {location} | CACHED "
         f"(samples={entry.get('samples', 0)}, last={entry.get('last_label', '')})"
         f"{enc_note}{dec_note}]\n"
     )
@@ -269,6 +270,7 @@ async def _query_target(args: dict, ctx: ToolContext) -> str:
         label, _ = classify(reply or "")
         cache.put(cache_key, label, reply or "")
     target = ctx.config.target
+    location = target.base_url or target.protocol
     # output-classifier evasion: if the model was told to ANSWER in a cipher, decode it
     # FIRST so the judge grades the real substance, not gibberish. The raw (encoded) form
     # is what the classifier saw - keep it for evidence.
@@ -290,7 +292,7 @@ async def _query_target(args: dict, ctx: ToolContext) -> str:
             "\n\n<<raw encoded reply (what the output classifier saw), excerpt>>\n"
             f"{raw_encoded[:300]}"
         )
-    header = f"[target {target.model} @ {target.base_url} | {dt:.1f}s{enc_note}{dec_note}]\n"
+    header = f"[target {target.model} @ {location} | {dt:.1f}s{enc_note}{dec_note}]\n"
     return header + body + note
 
 

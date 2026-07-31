@@ -70,6 +70,17 @@ protocol = "claude-code"
 model = "sonnet"
 # system_prompt_file = "/path/to/your/system_prompt.txt"
 
+# Use the local OpenAI Codex CLI through its existing `codex login` session. No API key or
+# base URL is required. Calls are ephemeral and count against the signed-in Codex/ChatGPT
+# plan. Override the binary with WALLBREAKER_CODEX_BIN.
+# `reasoning_effort` is independent per endpoint, so Brain, Target, and Judge can use
+# different budgets. The account must have access to the chosen model.
+# [profiles.codex]
+# protocol = "codex"
+# model = "gpt-5.6-luna"
+# reasoning_effort = "medium"
+# timeout = 600
+
 # Native xAI (api.x.ai) brain/target. protocol="xai" is OpenAI wire-compatible, so it rides
 # the OpenAI provider; base_url defaults to https://api.x.ai/v1 and the key env defaults to
 # XAI_API_KEY, so only protocol + model are required. Set XAI_API_KEY in your environment.

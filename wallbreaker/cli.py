@@ -2,22 +2,26 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import sys
 
 from dotenv import load_dotenv
 
-from .config import Config, ConfigError, Endpoint, load_config
+from .config import Config, ConfigError, Endpoint, REASONING_EFFORTS, load_config
 from .providers.base import ProviderError
 
 
 def _override_endpoint(base: Endpoint, args: argparse.Namespace) -> Endpoint:
-    return Endpoint(
-        name=base.name,
+    return dataclasses.replace(
+        base,
         protocol=args.protocol or base.protocol,
         base_url=(args.base_url or base.base_url).rstrip("/"),
         model=args.model or base.model,
         api_key_env=args.api_key_env or base.api_key_env,
         api_key=args.api_key or base.api_key,
+        reasoning_effort=(
+            getattr(args, "reasoning_effort", None) or base.reasoning_effort
+        ),
     )
 
 
@@ -32,7 +36,14 @@ def _add_endpoint_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--base-url", help="Override base URL")
     parser.add_argument("--model", help="Override model id")
     parser.add_argument(
-        "--protocol", choices=["openai", "anthropic"], help="Override wire protocol"
+        "--protocol",
+        choices=["openai", "anthropic", "xai", "claude-code", "codex"],
+        help="Override provider protocol",
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=REASONING_EFFORTS,
+        help="Override Codex reasoning effort",
     )
     parser.add_argument("--api-key-env", help="Env var holding the API key")
     parser.add_argument("--api-key", help="API key literal (prefer --api-key-env)")

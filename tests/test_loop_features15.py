@@ -32,6 +32,34 @@ def test_doctor_flags_missing_key(monkeypatch):
     assert "no key" in report
 
 
+def test_doctor_accepts_keyless_codex_roles(monkeypatch):
+    import wallbreaker.providers.codex as codex
+
+    monkeypatch.setattr(codex, "codex_login_status", lambda: (True, "Logged in for test"))
+    brain = Endpoint("brain", "codex", "", "gpt-5.6-sol", reasoning_effort="max")
+    target = Endpoint("target", "codex", "", "gpt-5.6-luna", reasoning_effort="low")
+    judge = Endpoint("judge", "codex", "", "gpt-5.6-luna", reasoning_effort="high")
+    cfg = Config(
+        default_profile="brain",
+        profiles={"brain": brain},
+        target=target,
+        judge=judge,
+    )
+    report, ok = doctor_report(cfg)
+    assert ok
+    assert "Logged in for test" in report
+
+
+def test_doctor_rejects_unavailable_codex_login(monkeypatch):
+    import wallbreaker.providers.codex as codex
+
+    monkeypatch.setattr(codex, "codex_login_status", lambda: (False, "codex CLI not found"))
+    brain = Endpoint("brain", "codex", "", "gpt-5.6-sol")
+    report, ok = doctor_report(Config(default_profile="brain", profiles={"brain": brain}))
+    assert not ok
+    assert "codex CLI not found" in report
+
+
 def test_doctor_notes_missing_target_and_judge():
     ep = Endpoint("p", "openai", "http://x", "m", api_key="k")
     cfg = Config(default_profile="p", profiles={"p": ep})
